@@ -1,0 +1,43 @@
+# Python virtual environment
+thesis/
+venv/
+env/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Data files (consider which data you want to track)
+data/raw/
+data/augmented/
+data/keypoints/
+
+.npy
+
+!data/augmented/augmented_data_here
+!data/keypoints/keypoints_data_here
+!data/raw/raw_data_here
+
+pose_landmarker_full.task
+pose_landmarker_heavy.task
+
+# Uncomment if you want to track mediapipe models
+# !models/mediapipe/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+
+# Other common files to ignore
+.coverage
+htmlcov/
+.pytest_cache/
