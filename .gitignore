@@ -3,6 +3,7 @@ thesis/
 venv/
 env/
 ENV/
+ubuntu/
 
 # Python bytecode
 __pycache__/
