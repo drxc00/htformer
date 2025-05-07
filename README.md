@@ -3,6 +3,8 @@ This repository contains the files and code used for creating the hierarchical t
 
 ## Data Organization
 
+Google drive link: [Data](https://drive.google.com/drive/folders/1clWxd97NM0EExJJRppgwfDhhTDBVFVX8?usp=sharing)
+
 - `data/raw/`: Contains the original unprocessed images
 - `data/keypoints/`: Stores extracted keypoint data. The `deadlifts_squat.npz` file contains the keypoint with label data for the deadlifts and squat exercises.
 - `data/augmented/`: Contains augmented images generated from the original dataset

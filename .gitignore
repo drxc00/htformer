@@ -23,6 +23,8 @@ data/augmented/
 data/keypoints/
 data/unseen/
 
+*.zip
+
 .npy
 
 !data/augmented/augmented_data_here
