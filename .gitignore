@@ -21,6 +21,7 @@ build/
 data/raw/
 data/augmented/
 data/keypoints/
+data/unseen/
 
 .npy
 

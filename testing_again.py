@@ -102,6 +102,6 @@ def blaze_pose(file_path:str) -> None:
         
 if __name__ == "__main__":
     
-    mediapipe_pose(r"data/augmented/squats/32995_3_original.mp4")
+    mediapipe_pose(r"data/unseen/squat_neil_3.mp4")
         
         
