@@ -11,6 +11,190 @@ import cv2 as cv
 import mediapipe as mp
 from multiprocessing import Process
 import os
+from scipy.spatial.transform import Rotation as ScipyRotation # For 3D normalization
+
+class KeypointExtractorV2:
+    def __init__(self, model_path: str):
+        self.model_path = model_path
+        self.file_count = 0
+        self.num_landmarks = 33
+        # LANDMARK_INDICES can still be useful for _normalize_pose_3d
+        self.LANDMARK_INDICES = {
+            'nose': 0,
+            'left_shoulder': 11, 'right_shoulder': 12,
+            'left_elbow': 13, 'right_elbow': 14,
+            'left_wrist': 15, 'right_wrist': 16,
+            'left_hip': 23, 'right_hip': 24,
+            'left_knee': 25, 'right_knee': 26,
+            'left_ankle': 27, 'right_ankle': 28
+        }
+        BaseOptions = mp.tasks.BaseOptions
+        self.PoseLandmarker = mp.tasks.vision.PoseLandmarker
+        PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+        VisionRunningMode = mp.tasks.vision.RunningMode
+        self.options = PoseLandmarkerOptions(
+            base_options=BaseOptions(
+                model_asset_path=self.model_path,
+                delegate=mp.tasks.BaseOptions.Delegate.CPU
+            ),
+            running_mode=VisionRunningMode.VIDEO,
+            # IMPORTANT: Ensure your model version and options are set to output world landmarks
+            # This is usually default for pose_landmarker models, but good to be aware.
+        )
+
+    def _normalize_pose_3d(self, landmarks_3d: np.ndarray) -> np.ndarray:
+        """
+        Normalizes a 3D pose to a canonical orientation and scale.
+        Input: landmarks_3d is a (N, 3) NumPy array (MediaPipe BlazePose 33 landmarks).
+        Output: Pose with hip_center at origin, person facing +Z, up along +Y, left along +X.
+                Spine length (hip_center to shoulder_center) will be normalized to 1.
+        """
+        if landmarks_3d.shape[0] != self.num_landmarks or landmarks_3d.shape[1] != 3:
+            # Handle cases where input is not as expected, though MediaPipe should provide 33,3
+            print(f"Warning: Unexpected landmark shape for 3D normalization: {landmarks_3d.shape}")
+            return np.zeros((self.num_landmarks, 3))
+
+
+        # MediaPipe landmark indices from self.LANDMARK_INDICES
+        LM_L_SHOULDER, LM_R_SHOULDER = self.LANDMARK_INDICES['left_shoulder'], self.LANDMARK_INDICES['right_shoulder']
+        LM_L_HIP, LM_R_HIP = self.LANDMARK_INDICES['left_hip'], self.LANDMARK_INDICES['right_hip']
+        LM_NOSE = self.LANDMARK_INDICES['nose']
+
+        # 1. Center the pose at the hip center
+        left_hip = landmarks_3d[LM_L_HIP]
+        right_hip = landmarks_3d[LM_R_HIP]
+        hip_center = (left_hip + right_hip) / 2.0
+        centered_landmarks = landmarks_3d - hip_center
+
+        # 2. Define body axes from centered landmarks
+        c_l_shoulder = centered_landmarks[LM_L_SHOULDER]
+        c_r_shoulder = centered_landmarks[LM_R_SHOULDER]
+        c_l_hip = centered_landmarks[LM_L_HIP] # Will be close to -hip_center relative to original hip_center
+        c_r_hip = centered_landmarks[LM_R_HIP]
+        c_nose = centered_landmarks[LM_NOSE]
+
+        shoulder_midpoint = (c_l_shoulder + c_r_shoulder) / 2.0
+        current_hip_midpoint = (c_l_hip + c_r_hip) / 2.0
+
+        body_up_vector = shoulder_midpoint - current_hip_midpoint
+        norm_body_up = np.linalg.norm(body_up_vector)
+        if norm_body_up < 1e-6: return np.zeros_like(centered_landmarks) # Avoid division by zero for degenerate poses
+        body_up_vector /= norm_body_up
+
+        body_left_vector = c_l_shoulder - c_r_shoulder # From right to left is person's left
+        norm_body_left = np.linalg.norm(body_left_vector)
+        if norm_body_left < 1e-6: return np.zeros_like(centered_landmarks)
+        body_left_vector /= norm_body_left
+
+        body_left_vector -= np.dot(body_left_vector, body_up_vector) * body_up_vector # Make orthogonal to up
+        norm_body_left_ortho = np.linalg.norm(body_left_vector)
+        if norm_body_left_ortho < 1e-6: return np.zeros_like(centered_landmarks)
+        body_left_vector /= norm_body_left_ortho
+
+        body_forward_vector = np.cross(body_up_vector, body_left_vector) # up x left = forward
+        # Disambiguate Forward Vector
+        chest_to_nose_vector = c_nose - shoulder_midpoint
+        if np.linalg.norm(chest_to_nose_vector) > 1e-6 and np.dot(body_forward_vector, chest_to_nose_vector) < 0:
+            body_forward_vector = -body_forward_vector
+            body_left_vector = -body_left_vector
+
+        # 3. Align to canonical axes (Up=+Y, Forward=+Z, Left=+X)
+        source_vectors = np.array([body_up_vector, body_forward_vector])
+        target_vectors = np.array([[0, 1, 0], [0, 0, 1]]) # Align body_up with Y, body_forward with Z
+        
+        try:
+            rotation, _ = ScipyRotation.align_vectors(target_vectors, source_vectors)
+            oriented_landmarks = rotation.apply(centered_landmarks)
+        except Exception as e:
+            # print(f"Warning: Could not align vectors: {e}. Returning centered landmarks.")
+            oriented_landmarks = centered_landmarks
+
+
+        # 4. Scale normalization (spine length = 1)
+        o_l_shoulder = oriented_landmarks[LM_L_SHOULDER]
+        o_r_shoulder = oriented_landmarks[LM_R_SHOULDER]
+        o_l_hip = oriented_landmarks[LM_L_HIP]
+        o_r_hip = oriented_landmarks[LM_R_HIP]
+        
+        o_shoulder_midpoint = (o_l_shoulder + o_r_shoulder) / 2.0
+        o_hip_midpoint = (o_l_hip + o_r_hip) / 2.0
+
+        spine_length = np.linalg.norm(o_shoulder_midpoint - o_hip_midpoint)
+        
+        if spine_length > 1e-6:
+            normalized_scaled_landmarks = oriented_landmarks / spine_length
+        else:
+            normalized_scaled_landmarks = oriented_landmarks
+
+        return normalized_scaled_landmarks
+
+    def _load_video(self, path: str) -> cv.VideoCapture:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Video does not exist: {path}")
+        cap = cv.VideoCapture(path)
+        if not cap.isOpened():
+            raise ValueError(f"Cannot open video file: {path}")
+        return cap
+
+    def extract(self, file: str) -> np.ndarray:
+        try:
+            with self.PoseLandmarker.create_from_options(self.options) as landmarker:
+                cap = self._load_video(file)
+                orig_w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+                orig_h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+                total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+                
+                all_frames_keypoints = []
+                frame_idx = 0
+                
+                print(f"Processing {file}: {orig_w}x{orig_h}, {total_frames} frames")
+                
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                    # Pass frame_idx as timestamp for video mode
+                    timestamp_ms = int(cap.get(cv.CAP_PROP_POS_MSEC)) 
+                    detection_result = landmarker.detect_for_video(mp_image, timestamp_ms) # Use timestamp
+                    
+                    current_frame_output = np.zeros((self.num_landmarks, 4)) # Default for no detection
+
+                    if detection_result.pose_world_landmarks and detection_result.pose_landmarks:
+                        if len(detection_result.pose_world_landmarks) > 0 and \
+                           len(detection_result.pose_landmarks[0]) == self.num_landmarks and \
+                           len(detection_result.pose_world_landmarks[0]) == self.num_landmarks:
+                            
+                            world_landmarks_mp = detection_result.pose_world_landmarks[0]
+                            image_landmarks_mp = detection_result.pose_landmarks[0] # For visibility
+
+                            # Convert world landmarks to (33, 3) NumPy array
+                            frame_world_keypoints_3d = np.array(
+                                [[lm.x, lm.y, lm.z] for lm in world_landmarks_mp]
+                            )
+                            
+                            # Apply 3D normalization
+                            normalized_3d_keypoints = self._normalize_pose_3d(frame_world_keypoints_3d)
+                            
+                            # Get visibility scores
+                            visibilities = np.array(
+                                [[lm.visibility] for lm in image_landmarks_mp] # Shape (33,1)
+                            )
+                            
+                            # Combine normalized 3D keypoints with visibility
+                            current_frame_output = np.hstack((normalized_3d_keypoints, visibilities))
+                    
+                    all_frames_keypoints.append(current_frame_output)
+                    frame_idx += 1
+                
+                cap.release()
+                print(f"Extracted and normalized {len(all_frames_keypoints)} frames from {file}")
+                return np.array(all_frames_keypoints)
+        except Exception as e:
+            print(f"✗ Error processing {file}: {str(e)}")
+            # Return a consistent empty or error structure if needed, e.g., empty array
+            return np.empty((0, self.num_landmarks, 4))
 
 class KeypointExtractor:
     def __init__ (self, model_path: str):
@@ -172,8 +356,6 @@ class KeypointExtractor:
         except Exception as e:
             print(f"✗ Error processing {file}: {str(e)}")
             return {'success': False, 'filename': file, 'error': str(e)}
-    
-    
 
 class LegacyKeypointExtractor:
     def __init__(self, model_path: str , input_dir: str, output_dir: str, exercise: str):
@@ -263,15 +445,63 @@ class LegacyKeypointExtractor:
         for file_name in os.listdir(self.input_dir):
             if file_name.endswith(".mp4"):
                 self.extract(file_name)
+   
+   
+def extract_keypoints(input_dir, output_dir, exercise):
+    """
+    Extract keypoints from video files in the input directory and save them to the output directory.
+    
+    Args:
+        input_dir (str): Path to the input directory containing video files.
+        output_dir (str): Path to the output directory to save the extracted keypoints.
+        exercise (str): Name of the exercise to extract keypoints for.
+    """
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Create KeypointExtractor instance
+    extractor = KeypointExtractorV2(model_path="models/mediapipe/pose_landmarker_full.task")
+    
+    file_count = 0  # Reset file count for each extraction session
+    
+    # Loop through all files in the input directory
+    for file in os.listdir(input_dir):
+        if file.endswith(".mp4"):
+            # Extract keypoints from the file
+            keypoints = extractor.extract(os.path.join(input_dir, file))
             
+            # Save keypoints to a NumPy file
+            output_path = os.path.join(output_dir, exercise + "_" + str(file_count) + ".npy")
+            np.save(output_path, keypoints)
+            
+            file_count += 1
+            
+            print(f"Extracted keypoints for {file}")
+            
+def extract_deadlift():
+    input_dir = "data/augmented/deadlifts/"
+    output_dir = "data/keypoints/deadlifts/"
+    exercise = "deadlift"
+    
+    extract_keypoints(input_dir, output_dir, exercise)
+    
+def extract_squat():
+    input_dir = "data/augmented/squats/"
+    output_dir = "data/keypoints/squats/"
+    exercise = "squat"
+    
+    extract_keypoints(input_dir, output_dir, exercise)         
 
 def main () -> None:
-    # Sample test
-    model_path = "models/mediapipe/pose_landmarker_heavy.task"
-    extractor = KeypointExtractor(model_path)  
+    p1 = Process(target=extract_deadlift)
+    p2 = Process(target=extract_squat)
     
-    extracted = extractor.extract("data/raw/squats/squats_neil_2_1.mp4")
-    print(extracted.shape)
+    p1.start()
+    p2.start()
+    
+    p1.join()
+    p2.join()
         
 if __name__ == '__main__':
     main()
