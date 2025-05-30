@@ -1,3 +1,7 @@
+# This file contains the DataAugmentor class, which is used to augment video files by applying horizontal flips, slight rotations, and resizing.
+# To use the Augmentor, create an instance of the DataAugmentor class with the input and output directories, and call the `run` method.
+# More augmentation methods can be added as needed. Currently, it supports only defined in the thesis proposal: horizontal flip and slight rotation.
+
 import time
 from tracemalloc import start
 import numpy as np

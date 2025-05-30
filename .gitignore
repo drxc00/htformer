@@ -30,6 +30,8 @@ data/unseen/
 !data/augmented/augmented_data_here
 !data/keypoints/keypoints_data_here
 !data/raw/raw_data_here
+data/raw_uncut/
+data/zips/
 
 pose_landmarker_full.task
 pose_landmarker_heavy.task

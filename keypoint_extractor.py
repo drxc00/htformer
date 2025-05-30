@@ -1,11 +1,181 @@
+# The KypointExtractor class is used to extract keypoints from video files using MediaPipe.
+# This class normalizes the keypoints based on body proportions to ensure scale consistency across different videos.
+# 
+# The code below defines the KeypointExtractor class, which uses MediaPipe's PoseLandmarker to extract and normalize keypoints from video files.
+# It also contains a LegacyKeypointExtractor class which was used for the prototype of the Hierarchical Transformer model. (Do not use this class anymore)
+
+import math
+from typing import List
 import numpy as np
 import cv2 as cv
 import mediapipe as mp
 from multiprocessing import Process
-import time
 import os
 
 class KeypointExtractor:
+    def __init__ (self, model_path: str):
+        self.model_path = model_path
+        
+        # Filename Counter
+        self.file_count = 0
+        self.num_landmarks = 33
+        
+        # MediaPipe landmark indices
+        # These indices are used for normalization and consistency
+        self.LANDMARK_INDICES = {
+            'nose': 0,
+            'left_shoulder': 11, 'right_shoulder': 12,
+            'left_elbow': 13, 'right_elbow': 14,
+            'left_wrist': 15, 'right_wrist': 16,
+            'left_hip': 23, 'right_hip': 24,
+            'left_knee': 25, 'right_knee': 26,
+            'left_ankle': 27, 'right_ankle': 28
+        }
+
+        # Model config
+        BaseOptions = mp.tasks.BaseOptions
+        self.PoseLandmarker = mp.tasks.vision.PoseLandmarker
+        PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+        VisionRunningMode = mp.tasks.vision.RunningMode
+
+        self.options = PoseLandmarkerOptions(
+            base_options=BaseOptions(
+                model_asset_path=self.model_path,
+                delegate=mp.tasks.BaseOptions.Delegate.CPU
+            ),
+            running_mode=VisionRunningMode.VIDEO
+        )
+    
+    def _calculate_distance(self, point1: List[float], point2: List[float]) -> float:
+        """Calculate Euclidean distance between two points"""
+        return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
+    
+    def _get_normalization_factor(self, landmarks: List[List[float]]) -> float:
+        """
+        Calculate normalization factor based on body proportions
+        Returns a scale factor to normalize pose size
+        """
+        left_shoulder = landmarks[self.LANDMARK_INDICES['left_shoulder']]
+        right_shoulder = landmarks[self.LANDMARK_INDICES['right_shoulder']]
+        left_hip = landmarks[self.LANDMARK_INDICES['left_hip']]
+        right_hip = landmarks[self.LANDMARK_INDICES['right_hip']]
+        
+        shoulder_center = [(left_shoulder[0] + right_shoulder[0])/2, 
+                            (left_shoulder[1] + right_shoulder[1])/2]
+        hip_center = [(left_hip[0] + right_hip[0])/2, 
+                        (left_hip[1] + right_hip[1])/2]
+        
+        torso_length = self._calculate_distance(shoulder_center, hip_center)
+        return torso_length if torso_length > 0 else 1.0
+    
+    def _normalize_pose_scale(self, landmarks: List[List[float]]) -> List[List[float]]:
+        """
+        Normalize pose scale based on body proportions
+        """
+        normalization_factor = self._get_normalization_factor(landmarks)
+        
+        if normalization_factor <= 0:
+            return landmarks
+        
+        # Calculate pose center (average of all visible landmarks)
+        visible_landmarks = [lm for lm in landmarks if lm[3] > 0.5]  # visibility > 0.5
+        if not visible_landmarks:
+            return landmarks
+            
+        center_x = sum(lm[0] for lm in visible_landmarks) / len(visible_landmarks)
+        center_y = sum(lm[1] for lm in visible_landmarks) / len(visible_landmarks)
+        
+        # Normalize landmarks relative to center and scale
+        normalized_landmarks = []
+        target_scale = 0.3  # Target normalized scale (adjustable)
+        scale_factor = target_scale / normalization_factor
+        
+        for landmark in landmarks:
+            if landmark[3] > 0:  # If landmark is visible
+                # Translate to origin, scale, then translate back
+                norm_x = center_x + (landmark[0] - center_x) * scale_factor
+                norm_y = center_y + (landmark[1] - center_y) * scale_factor
+                normalized_landmarks.append([norm_x, norm_y, landmark[2], landmark[3]])
+            else:
+                normalized_landmarks.append(landmark)  # Keep invisible landmarks as-is
+        
+        return normalized_landmarks
+    
+    def _load_video(self, path: str) -> cv.VideoCapture:
+        """Load video file and return VideoCapture object"""
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Video does not exist: {path}")
+        
+        cap = cv.VideoCapture(path)
+        if not cap.isOpened():
+            raise ValueError(f"Cannot open video file: {path}")
+        
+        return cap
+    
+    def extract(self, file: str) -> np.ndarray:
+        """
+        Extract scale-consistent keypoints from video
+        
+        Returns:
+            dict: Processing results and statistics
+        """
+        try:
+            with self.PoseLandmarker.create_from_options(self.options) as landmarker:
+                cap = self._load_video(file)
+                
+                # Get video properties
+                orig_w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+                orig_h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+                total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+                
+                keypoints = []
+                frame_idx = 0
+                
+                print(f"Processing {file}: {orig_w}x{orig_h}, {total_frames} frames")
+                
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret:
+                        break
+                    
+                    # Process at original resolution (no resizing for better accuracy)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
+                    detection_result = landmarker.detect_for_video(mp_image, frame_idx)
+                    
+                    if detection_result.pose_landmarks and len(detection_result.pose_landmarks) > 0:
+                        landmarks = detection_result.pose_landmarks[0]
+                        
+                        # Convert to list format
+                        frame_keypoints = [
+                            [landmark.x, landmark.y, landmark.z, landmark.visibility] 
+                            for landmark in landmarks
+                        ]
+                        
+                        # Apply scale normalization
+                        normalized_keypoints = self._normalize_pose_scale(frame_keypoints)
+                        keypoints.append(normalized_keypoints)
+                    else:
+                        # No landmarks detected
+                        frame_keypoints = [[0.0, 0.0, 0.0, 0.0] for _ in range(self.num_landmarks)]
+                        keypoints.append(frame_keypoints)
+                    
+                    frame_idx += 1
+                
+                cap.release()
+                
+                print(f"Extracted {len(keypoints)} frames from {file}")
+                
+                # Convert to numpy array
+                keypoints_array = np.array(keypoints)
+            
+                return keypoints_array 
+        except Exception as e:
+            print(f"✗ Error processing {file}: {str(e)}")
+            return {'success': False, 'filename': file, 'error': str(e)}
+    
+    
+
+class LegacyKeypointExtractor:
     def __init__(self, model_path: str , input_dir: str, output_dir: str, exercise: str):
         self.model_path = model_path
         self.input_dir = input_dir
@@ -94,40 +264,14 @@ class KeypointExtractor:
             if file_name.endswith(".mp4"):
                 self.extract(file_name)
             
-def extract_deadlifts() -> None:
-    extractor = KeypointExtractor(
-        input_dir="data\\augmented\\deadlifts",
-        output_dir="data\\keypoints\\deadlifts",
-        model_path="models\\mediapipe\\pose_landmarker_heavy.task",
-        exercise="deadlift",
-    )
-    extractor.run()
-    
-def extract_squats() -> None:
-    extractor = KeypointExtractor(
-        input_dir="data\\augmented\\squats",
-        output_dir="data\\keypoints\\squats",
-        model_path="models\\mediapipe\\pose_landmarker_heavy.task",  
-        exercise="squat",
-    )
-    extractor.run()
 
 def main () -> None:
-    start_time = time.time()
-    print("Extracting started")
-    deadlift_proc = Process(target=extract_deadlifts)
-    squat_proc = Process(target=extract_squats)
-
-    deadlift_proc.start()
-    squat_proc.start()
-    deadlift_proc.join()
-    squat_proc.join()
+    # Sample test
+    model_path = "models/mediapipe/pose_landmarker_heavy.task"
+    extractor = KeypointExtractor(model_path)  
     
-    end_time = time.time() # get en
-    
-    print("Extracting finished in " + str(end_time - start_time) + " seconds")
-            
-        
+    extracted = extractor.extract("data/raw/squats/squats_neil_2_1.mp4")
+    print(extracted.shape)
         
 if __name__ == '__main__':
     main()

@@ -8,6 +8,7 @@ Google drive link: [Data](https://drive.google.com/drive/folders/1clWxd97NM0EExJ
 - `data/raw/`: Contains the original unprocessed images
 - `data/keypoints/`: Stores extracted keypoint data. The `deadlifts_squat.npz` file contains the keypoint with label data for the deadlifts and squat exercises.
 - `data/augmented/`: Contains augmented images generated from the original dataset
+- `data/raw_unseen/`: Contains raw videos that were not used in the dataset creation process
 
 ## File Structure
 - `augment.py`: Script for data augmentation that creates variations of exercise videos (flips, rotations)
