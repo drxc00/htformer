@@ -94,7 +94,7 @@ def mediapipe_pose_heavy_optimized(file_path: str, target_fps: int = 15) -> None
     
     options = PoseLandmarkerOptions(
         base_options=BaseOptions(
-            model_asset_path=r"models/mediapipe/pose_landmarker_heavy.task",
+            model_asset_path=r"models/mediapipe/pose_landmarker_full.task",
             delegate=python.BaseOptions.Delegate.CPU),
         running_mode=VisionRunningMode.VIDEO)
     
@@ -199,6 +199,6 @@ def blaze_pose(file_path:str) -> None:
         
 if __name__ == "__main__":
     
-    mediapipe_pose_heavy_optimized(r"data/raw/shoulder_press/shoulder press_5_rep_1.mp4")
+    mediapipe_pose_heavy_optimized(r"data/raw/shoulder_press/shoulder press_30_1.mp4")
         
         

@@ -110,18 +110,27 @@ def augment_squats():
 def augment_deadlifts():
     augmentor = DataAugmentor('data\\raw\\deadlifts', 'data\\augmented\\deadlifts')
     augmentor.run()
+    
+def augment_shoulder_press():
+    augmentor = DataAugmentor('data\\raw\\shoulder_press', 'data\\augmented\\shoulder_press')
+    augmentor.run()
             
 def main() -> None:
     start = time.time()
     print ("[INFO] Starting augmentation...")
-    t_1 = threading.Thread(target=augment_squats)
-    t_2 = threading.Thread(target=augment_deadlifts)
+    # t_1 = threading.Thread(target=augment_squats)
+    # t_2 = threading.Thread(target=augment_deadlifts)
 
-    t_1.start()
-    t_2.start()
+    # t_1.start()
+    # t_2.start()
 
-    t_1.join()
-    t_2.join()
+    # t_1.join()
+    # t_2.join()
+    
+    t_3 = threading.Thread(target=augment_shoulder_press)
+    t_3.start()
+    
+    t_3.join()
     
     end = time.time()
     

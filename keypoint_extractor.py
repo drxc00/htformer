@@ -135,14 +135,48 @@ class KeypointExtractorV2:
         if not cap.isOpened():
             raise ValueError(f"Cannot open video file: {path}")
         return cap
+    
+    def _extract_video_data(self, cap: cv.VideoCapture):
+        orig_w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+        orig_h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+        return orig_w, orig_h, total_frames
+
+    def _extract_keypoints(self, detection_result):
+        current_frame_output = np.zeros((self.num_landmarks, 4))
+        if detection_result.pose_world_landmarks and detection_result.pose_landmarks:
+            if len(detection_result.pose_world_landmarks) > 0 and \
+                len(detection_result.pose_landmarks[0]) == self.num_landmarks and \
+                len(detection_result.pose_world_landmarks[0]) == self.num_landmarks:
+                
+                world_landmarks_mp = detection_result.pose_world_landmarks[0]
+                image_landmarks_mp = detection_result.pose_landmarks[0] # For visibility
+
+                # Convert world landmarks to (33, 3) NumPy array
+                frame_world_keypoints_3d = np.array(
+                    [[lm.x, lm.y, lm.z] for lm in world_landmarks_mp]
+                )
+                
+                # Apply 3D normalization
+                normalized_3d_keypoints = self._normalize_pose_3d(frame_world_keypoints_3d)
+                
+                # Get visibility scores
+                visibilities = np.array(
+                    [[lm.visibility] for lm in image_landmarks_mp] # Shape (33,1)
+                )
+                
+                # Combine normalized 3D keypoints with visibility
+                current_frame_output = np.hstack((normalized_3d_keypoints, visibilities))
+                
+        return current_frame_output
 
     def extract(self, file: str) -> np.ndarray:
         try:
             with self.PoseLandmarker.create_from_options(self.options) as landmarker:
                 cap = self._load_video(file)
-                orig_w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
-                orig_h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-                total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
+                
+                # Extract video properties
+                orig_w, orig_h, total_frames = self._extract_video_data(cap)
                 
                 all_frames_keypoints = []
                 frame_idx = 0
@@ -158,32 +192,9 @@ class KeypointExtractorV2:
                     # Pass frame_idx as timestamp for video mode
                     timestamp_ms = int(cap.get(cv.CAP_PROP_POS_MSEC)) 
                     detection_result = landmarker.detect_for_video(mp_image, timestamp_ms) # Use timestamp
-                    
-                    current_frame_output = np.zeros((self.num_landmarks, 4)) # Default for no detection
 
-                    if detection_result.pose_world_landmarks and detection_result.pose_landmarks:
-                        if len(detection_result.pose_world_landmarks) > 0 and \
-                           len(detection_result.pose_landmarks[0]) == self.num_landmarks and \
-                           len(detection_result.pose_world_landmarks[0]) == self.num_landmarks:
-                            
-                            world_landmarks_mp = detection_result.pose_world_landmarks[0]
-                            image_landmarks_mp = detection_result.pose_landmarks[0] # For visibility
-
-                            # Convert world landmarks to (33, 3) NumPy array
-                            frame_world_keypoints_3d = np.array(
-                                [[lm.x, lm.y, lm.z] for lm in world_landmarks_mp]
-                            )
-                            
-                            # Apply 3D normalization
-                            normalized_3d_keypoints = self._normalize_pose_3d(frame_world_keypoints_3d)
-                            
-                            # Get visibility scores
-                            visibilities = np.array(
-                                [[lm.visibility] for lm in image_landmarks_mp] # Shape (33,1)
-                            )
-                            
-                            # Combine normalized 3D keypoints with visibility
-                            current_frame_output = np.hstack((normalized_3d_keypoints, visibilities))
+                    # Extract keypoints from the detection result
+                    current_frame_output = self._extract_keypoints(detection_result)
                     
                     all_frames_keypoints.append(current_frame_output)
                     frame_idx += 1
