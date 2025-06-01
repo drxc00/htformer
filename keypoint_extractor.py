@@ -502,17 +502,27 @@ def extract_squat():
     output_dir = "data/keypoints/squats/"
     exercise = "squat"
     
-    extract_keypoints(input_dir, output_dir, exercise)         
+    extract_keypoints(input_dir, output_dir, exercise)        
+    
+def extract_shoulder_press():
+    input_dir = "data/augmented/shoulder_press/"
+    output_dir = "data/keypoints/shoulder_press/"
+    exercise = "shoulder_press"
+    extract_keypoints(input_dir, output_dir, exercise)
 
 def main () -> None:
     p1 = Process(target=extract_deadlift)
     p2 = Process(target=extract_squat)
+    p3 = Process(target=extract_shoulder_press)
     
     p1.start()
     p2.start()
+    p3.start()
     
     p1.join()
     p2.join()
+    p3.join()
+
         
 if __name__ == '__main__':
     main()

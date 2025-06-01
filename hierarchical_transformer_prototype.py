@@ -49,7 +49,8 @@ class SpatialTransformerEncoder(nn.Module):
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
-            dropout=dropout
+            dropout=dropout,
+            batch_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
         self.pos_encoder = PositionalEncoding(d_model, max_len=num_joints)
@@ -87,7 +88,8 @@ class TemporalTransformerEncoder(nn.Module):
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
-            dropout=dropout
+            dropout=dropout,
+            batch_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
         self.pos_encoder = PositionalEncoding(d_model, max_len=num_frames)

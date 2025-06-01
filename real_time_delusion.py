@@ -23,11 +23,11 @@ class RealTimeExerciseRecognition:
             nhead=8,
             num_spatial_layers=1,
             num_temporal_layers=1,
-            num_classes=2
+            num_classes=3
         )
         self.model.load_state_dict(torch.load(self.model_path))
         
-        self.class_labels = {0: "Squats", 1: "Deadlifts"}
+        self.class_labels = {0: "Squats", 1: "Deadlifts", 2: "Shoulder Press"}
         
         
         # mediapipe shit
@@ -77,7 +77,7 @@ class RealTimeExerciseRecognition:
 
         return np.array(padded_sample)
     
-    def run(self, video_path:str):
+    def run(self, video_path:str = None):
         v = 0
         if video_path:
             v=video_path
@@ -131,6 +131,7 @@ class RealTimeExerciseRecognition:
                         with torch.no_grad():
                             logits = self.model(x_tensor)
                             predicted_class = torch.argmax(logits, dim=1).item()
+                            print("Logits:", logits)
                             print(f"Predicted class: {self.class_labels[predicted_class]}")
                             
                     except Exception as e:
@@ -152,12 +153,12 @@ class RealTimeExerciseRecognition:
             
 
 def main():
-    model_path = "hierarchical_transformer_weights_2025-05-30.pth"
+    model_path = "hierarchical_transformer_weights_2025-06-01.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_lite.task"
     )
-    real_time_recognizer.run(video_path="data/raw/deadlifts/deadlift_42_rep_1.mp4")
+    real_time_recognizer.run()
     
 if __name__ == "__main__":
     main()
