@@ -19,11 +19,12 @@ class RealTimeExerciseRecognition:
         self.model = HierarchicalTransformer(
             num_joints=33,
             num_frames=331,
-            d_model=128,
-            nhead=8,
+            d_model=64,
+            nhead=4,
             num_spatial_layers=1,
             num_temporal_layers=1,
-            num_classes=3
+            num_classes=3,
+            dim_feedforward=512
         )
         self.model.load_state_dict(torch.load(self.model_path))
         
@@ -89,7 +90,7 @@ class RealTimeExerciseRecognition:
         
         fidx = 0
         frame_window = []
-        window_size = 60  # Adjust based on your model's expected sequence length
+        window_size = 30  # Adjust based on your model's expected sequence length
         prediction_text = "Waiting for poses..."
         confidence = 0.0
         
@@ -131,7 +132,6 @@ class RealTimeExerciseRecognition:
                         with torch.no_grad():
                             logits = self.model(x_tensor)
                             predicted_class = torch.argmax(logits, dim=1).item()
-                            print("Logits:", logits)
                             print(f"Predicted class: {self.class_labels[predicted_class]}")
                             
                     except Exception as e:
@@ -153,7 +153,7 @@ class RealTimeExerciseRecognition:
             
 
 def main():
-    model_path = "hierarchical_transformer_weights_2025-06-01.pth"
+    model_path = "hierarchical_transformer_weights_2025-06-02_small_1.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_lite.task"
