@@ -153,7 +153,7 @@ class RealTimeExerciseRecognition:
             
 
 def main():
-    model_path = "hierarchical_transformer_weights_2025-06-02_small_1.pth"
+    model_path = "models/hierarchical transformer/hierarchical_transformer_weights_2025-06-03_small_1.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_lite.task"
