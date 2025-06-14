@@ -199,6 +199,6 @@ def blaze_pose(file_path:str) -> None:
         
 if __name__ == "__main__":
     
-    mediapipe_pose_heavy_optimized(r"data/raw/shoulder_press/shoulder press_30_1.mp4")
+    mediapipe_pose(r"data/raw/deadlifts/romanian deadlift_36_1.mp4")
         
         

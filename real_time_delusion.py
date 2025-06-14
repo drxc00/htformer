@@ -78,10 +78,82 @@ class RealTimeExerciseRecognition:
 
         return np.array(padded_sample)
     
-    def run(self, video_path:str = None):
+    def _is_prediction_stable(self, recent_predictions, confidence_threshold):
+        """Check if recent predictions are stable and confident"""
+        if len(recent_predictions) < 3:
+            return False
+        
+        # Check if recent predictions have sufficient confidence
+        high_conf_predictions = [p for p in recent_predictions 
+                               if p['confidence'] >= confidence_threshold]
+        
+        if len(high_conf_predictions) < 2:
+            return False
+        
+        # Check if the most confident predictions agree
+        most_common_class = max(set(p['class'] for p in high_conf_predictions),
+                              key=[p['class'] for p in high_conf_predictions].count)
+        
+        # Count how many recent high-confidence predictions match the most common
+        matching_predictions = sum(1 for p in high_conf_predictions 
+                                 if p['class'] == most_common_class)
+        
+        return matching_predictions >= len(high_conf_predictions) * 0.6  # 60% agreement
+
+    def _draw_confidence_overlay(self, image, prediction_text, model_confidence, 
+                               pose_confidence, pose_detected):
+        """Draw confidence information on the image"""
+        height, width = image.shape[:2]
+        
+        # Background for text
+        overlay = image.copy()
+        cv2.rectangle(overlay, (10, 10), (400, 120), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, image, 0.3, 0, image)
+        
+        # Prediction text
+        cv2.putText(image, f"Exercise: {prediction_text}", (20, 35),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        # Model confidence
+        conf_color = (0, 255, 0) if model_confidence > 0.7 else (0, 255, 255) if model_confidence > 0.5 else (0, 0, 255)
+        cv2.putText(image, f"Model Conf: {model_confidence:.2f}", (20, 60),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, conf_color, 2)
+        
+        # Pose detection confidence
+        pose_color = (0, 255, 0) if pose_confidence > 0.7 else (0, 255, 255) if pose_confidence > 0.5 else (0, 0, 255)
+        cv2.putText(image, f"Pose Conf: {pose_confidence:.2f}", (20, 85),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, pose_color, 2)
+        
+        # Pose detection status
+        status_text = "Pose: OK" if pose_detected else "Pose: WEAK"
+        status_color = (0, 255, 0) if pose_detected else (0, 0, 255)
+        cv2.putText(image, status_text, (20, 110),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, status_color, 2)
+        
+        # Confidence bars
+        self._draw_confidence_bar(image, width - 150, 30, model_confidence, "Model")
+        self._draw_confidence_bar(image, width - 150, 60, pose_confidence, "Pose")
+
+    def _draw_confidence_bar(self, image, x, y, confidence, label):
+        """Draw a confidence bar"""
+        bar_width = 100
+        bar_height = 15
+        
+        # Background bar
+        cv2.rectangle(image, (x, y), (x + bar_width, y + bar_height), (50, 50, 50), -1)
+        
+        # Confidence bar
+        conf_width = int(bar_width * confidence)
+        color = (0, 255, 0) if confidence > 0.7 else (0, 255, 255) if confidence > 0.5 else (0, 0, 255)
+        cv2.rectangle(image, (x, y), (x + conf_width, y + bar_height), color, -1)
+        
+        # Label
+        cv2.putText(image, label, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+    
+    def run(self, video_path: str = None, confidence_threshold: float = 0.7):
         v = 0
         if video_path:
-            v=video_path
+            v = video_path
             
         cap = cv2.VideoCapture(v)
         if not cap.isOpened():
@@ -90,10 +162,14 @@ class RealTimeExerciseRecognition:
         
         fidx = 0
         frame_window = []
-        window_size = 30  # Adjust based on your model's expected sequence length
+        window_size = 60  # Adjust based on your model's expected sequence length
         prediction_text = "Waiting for poses..."
         confidence = 0.0
+        pose_confidence_threshold = 0.5  # Minimum confidence for pose landmarks
         
+        # Track prediction stability
+        recent_predictions = []
+        prediction_history_size = 5
         
         with self.PoseLandmarker.create_from_options(self.options) as landmarker:
             while cap.isOpened():
@@ -105,16 +181,29 @@ class RealTimeExerciseRecognition:
                 
                 pose_landmarker_result = landmarker.detect_for_video(mp_image, fidx)
                 
+                # Extract keypoints with confidence filtering
                 current_frame_output = self.keypoint_extractor._extract_keypoints(pose_landmarker_result)
                 
-                # Add current frame to window (with zero padding if no pose detected)
+                # Check pose detection confidence
+                pose_detected = False
+                avg_landmark_confidence = 0.0
+                
                 if current_frame_output is not None and len(current_frame_output) == 33:
-                    frame_window.append(current_frame_output)
+                    # Calculate average confidence from visibility scores (4th column)
+                    visibility_scores = current_frame_output[:, 3]
+                    avg_landmark_confidence = np.mean(visibility_scores)
+                    
+                    # Only use pose if confidence is above threshold
+                    if avg_landmark_confidence >= pose_confidence_threshold:
+                        frame_window.append(current_frame_output)
+                        pose_detected = True
+                    else:
+                        # Low confidence pose - treat as no pose
+                        frame_window.append(np.zeros((33, 4)))
                 else:
-                    # No pose detected or incomplete pose - add zeros
+                    # No pose detected
                     frame_window.append(np.zeros((33, 4)))
-                    
-                    
+                
                 # Maintain sliding window of fixed size
                 if len(frame_window) > window_size:
                     frame_window.pop(0)  # Remove oldest frame
@@ -124,21 +213,56 @@ class RealTimeExerciseRecognition:
                     try:
                         # Convert to model input format
                         np_frame_window = np.array(frame_window)  # Shape: (window_size, 33, 4)
-                        padded_sequence = self.padding(np_frame_window)  # Shape: (window_size, 33, 4) ouput: (331, 33, 4)
+                        padded_sequence = self.padding(np_frame_window)  # Shape: (331, 33, 4)
                         
-                        X_sample = padded_sequence[:, :, :3] # removes the visibility score
+                        X_sample = padded_sequence[:, :, :3]  # removes the visibility score
                         x_tensor = torch.tensor(X_sample, dtype=torch.float32).unsqueeze(0)
+                        
                         self.model.eval()
                         with torch.no_grad():
                             logits = self.model(x_tensor)
-                            predicted_class = torch.argmax(logits, dim=1).item()
-                            print(f"Predicted class: {self.class_labels[predicted_class]}")
+                            
+                            # Get prediction confidence using softmax
+                            probabilities = torch.softmax(logits, dim=1)
+                            max_prob, predicted_class = torch.max(probabilities, dim=1)
+                            
+                            prediction_confidence = max_prob.item()
+                            predicted_class = predicted_class.item()
+                            
+                            # Track recent predictions for stability
+                            recent_predictions.append({
+                                'class': predicted_class,
+                                'confidence': prediction_confidence,
+                                'pose_confidence': avg_landmark_confidence
+                            })
+                            
+                            if len(recent_predictions) > prediction_history_size:
+                                recent_predictions.pop(0)
+                            
+                            # Determine if prediction is stable and confident
+                            if self._is_prediction_stable(recent_predictions, confidence_threshold):
+                                prediction_text = f"{self.class_labels[predicted_class]}"
+                                confidence = prediction_confidence
+                            else:
+                                prediction_text = "Uncertain..."
+                                confidence = prediction_confidence
+                            
+                            print(f"Predicted: {self.class_labels[predicted_class]} "
+                                  f"(Model Conf: {prediction_confidence:.3f}, "
+                                  f"Pose Conf: {avg_landmark_confidence:.3f})")
                             
                     except Exception as e:
                         print(f"Inference error: {e}")
+                        prediction_text = "Error in prediction"
+                        confidence = 0.0
 
-                # for display purposes, we will draw the landmarks on the image
-                annotated_image = self.draw_landmarks_on_image(frame, pose_landmarker_result) 
+                # Draw landmarks and overlay confidence information
+                annotated_image = self.draw_landmarks_on_image(frame, pose_landmarker_result)
+                
+                # Add confidence visualization
+                self._draw_confidence_overlay(annotated_image, prediction_text, confidence, 
+                                            avg_landmark_confidence, pose_detected)
+                
                 cv2.imshow('frame', annotated_image)
                 
                 # Fix: Need to capture the key press properly
@@ -150,15 +274,14 @@ class RealTimeExerciseRecognition:
         
         cap.release()
         cv2.destroyAllWindows()
-            
 
 def main():
-    model_path = "models/hierarchical transformer/hierarchical_transformer_weights_2025-06-03_small_1.pth"
+    model_path = "models/hierarchical transformer/hierarchical_transformer_weights_2025-06-03_small_2.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_lite.task"
     )
+    # real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
     real_time_recognizer.run()
-    
 if __name__ == "__main__":
     main()
