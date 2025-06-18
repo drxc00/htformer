@@ -29,12 +29,6 @@ class DataAugmentor:
     def _apply_horizontal_flip(self, frame: np.ndarray) -> np.ndarray:
         return cv.flip(frame, 1)
     
-    def _apply_slight_rotation(self, frame: np.ndarray, angle: int) -> np.ndarray:
-        image_center = tuple(np.array(frame.shape[1::-1]) / 2)
-        rot_mat = cv.getRotationMatrix2D(image_center, angle, 1.0)
-        result = cv.warpAffine(frame, rot_mat, frame.shape[1::-1], flags=cv.INTER_LINEAR)
-        return result
-    
     def _create_video_writer(self, file_name: str, w: int, h: int) -> cv.VideoWriter:
         output_path = os.path.join(self.output_dir, file_name)
         return cv.VideoWriter(output_path, cv.VideoWriter_fourcc(*'mp4v'), 30, (w, h))
@@ -47,16 +41,9 @@ class DataAugmentor:
         
         base_name = os.path.splitext(file_name)[0] # remove extension from file nam
         
-        pos_rotate_deg = 10
-        neg_rotate_deg = -10
-        
         writers = {
             "original": self._create_video_writer(f"{base_name}_original.mp4", w=width, h=height),
             "flip": self._create_video_writer(f"{base_name}_aug_hflip.mp4", w=width, h=height),
-            "pos_rotate": self._create_video_writer(f"{base_name}_aug_rot{pos_rotate_deg}.mp4", w=width, h=height),
-            "pos_rotate_flip": self._create_video_writer(f"{base_name}_aug_rot{pos_rotate_deg}_hflip.mp4", w=width, h=height),
-            "neg_rotate": self._create_video_writer(f"{base_name}_aug_rot{neg_rotate_deg}.mp4", w=width, h=height),
-            "neg_rotate_flip": self._create_video_writer(f"{base_name}_aug_rot{neg_rotate_deg}_hflip.mp4", w=width, h=height)
         }
         
         while True:
@@ -68,21 +55,8 @@ class DataAugmentor:
             writers["original"].write(f)
             
             img_flip = self._apply_horizontal_flip(f)
-            # Apply positive rotation
-            img_pos_rot = self._apply_slight_rotation(f, pos_rotate_deg)
-            img_pos_rot = cv.resize(img_pos_rot, (width, height), interpolation=cv.INTER_AREA)
-            img_pos_flip_rot = self._apply_horizontal_flip(img_pos_rot)
-            
-            # Apply negative rotation
-            img_neg_rot = self._apply_slight_rotation(f, neg_rotate_deg)
-            img_neg_rot = cv.resize(img_neg_rot, (width, height), interpolation=cv.INTER_AREA)
-            img_neg_flip_rot = self._apply_horizontal_flip(img_neg_rot)
 
             writers["flip"].write(img_flip)
-            writers["pos_rotate"].write(img_pos_rot)
-            writers["pos_rotate_flip"].write(img_pos_flip_rot)
-            writers["neg_rotate"].write(img_neg_rot)
-            writers["neg_rotate_flip"].write(img_neg_flip_rot)
             
             if cv.waitKey(1) & 0xFF == ord('q'):
                 break
