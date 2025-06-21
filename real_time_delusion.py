@@ -332,7 +332,7 @@ class RealTimeExerciseRecognition:
         cv2.destroyAllWindows()
 
 def main():
-    model_path = "models/hierarchical transformer/hierarchical_transformer_v2_weights_2025-06-21.pth"
+    model_path = "models/hierarchical transformer/hierarchical_transformer_v2_weights_2025-06-21_complete.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_lite.task"

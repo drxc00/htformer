@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import math
@@ -84,29 +83,32 @@ class TemporalTransformerEncoder(nn.Module):
         dropout: float = 0.1
     ):
         super().__init__()
+        # --- keep batch_first=True ---
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            batch_first=True
+            batch_first=True          # <─ expect (B, F, D)
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers)
         self.pos_encoder = PositionalEncoding(d_model, max_len=num_frames)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, temporal_mask: torch.Tensor | None = None) -> torch.Tensor:
         """
-        Args:
-            x: Tensor of shape (batch_size, num_frames, d_model)
-        Returns:
-            y: Tensor of same shape as input
+        x: (batch_size, num_frames, d_model)
+        temporal_mask: (batch_size, num_frames)  — 1 = valid, 0 = padded
         """
-        # Transformer expects (seq_len, batch_size, d_model)
-        x = x.transpose(0, 1)  # (num_frames, batch, d_model)
-        x = self.pos_encoder(x)
-        y = self.transformer(x)
-        y = y.transpose(0, 1)  # (batch, num_frames, d_model)
-        return y
+        # Add positional encodings.
+        # pos_encoder wants (seq_len, batch, d_model) → quick transpose trick
+        x = self.pos_encoder(x.transpose(0, 1)).transpose(0, 1)   # back to (B, F, D)
+
+        # Build key‑padding mask (True = PAD)
+        src_key_padding_mask = (temporal_mask == 0) if temporal_mask is not None else None
+        # shape: (B, F)  — matches (batch, seq_len)
+
+        x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)  # still (B, F, D)
+        return x
     
 class HierarchicalTransformer(nn.Module):
     """
@@ -154,53 +156,27 @@ class HierarchicalTransformer(nn.Module):
         self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, x: torch.Tensor, temporal_mask: torch.Tensor = None) -> torch.Tensor:
-        # print("\n--- HierarchicalTransformer Forward Pass (Detailed Debug) ---")
-        # print(f"Input x shape: {x.shape}") # Expected: (batch_size, num_frames, num_joints, 3)
-
         x = self.embedding(x)
-        # print(f"After embedding: {x.shape}") # Expected: (batch_size, num_frames, num_joints, d_model)
-
         x = self.spatial_encoder(x)
-        # print(f"After spatial_encoder: {x.shape}") # Expected: (batch_size, num_frames, num_joints, d_model)
-
         x = x.mean(dim=2)
-        # print(f"After mean(dim=2) (joint pooling): {x.shape}") # Expected: (batch_size, num_frames, d_model) (e.g., 16, 200, 64)
-
+        x = self.temporal_encoder(x, temporal_mask=temporal_mask)  # (B, F, d_model)
         if temporal_mask is not None:
-            # print(f"Temporal mask IS provided. Mask shape: {temporal_mask.shape}") # Should be (16, 200)
+            # Convert to float and match device
+            temporal_mask = temporal_mask.to(x.device).float()  # (B, F)
 
-            # Ensure mask is on the correct device and is float
-            temporal_mask = temporal_mask.to(x.device).float()
-            # print(f"Mask dtype after .float() and .to(device): {temporal_mask.dtype}")
+            # Apply mask to zero out padded frame vectors
+            x = x * temporal_mask.unsqueeze(-1)  # (B, F, d_model)
 
-            # Expand mask for broadcasting: (batch, F, 1)
-            mask_expanded = temporal_mask.unsqueeze(-1)
-            # print(f"mask_expanded shape: {mask_expanded.shape}") # Expected: (16, 200, 1)
+            # Compute sum of valid vectors
+            sum_x = x.sum(dim=1)  # (B, d_model)
 
-            # Apply mask: Element-wise multiply to zero out padded values
-            masked_x = x * mask_expanded 
-            # print(f"masked_x shape (after applying mask): {masked_x.shape}") # Expected: (16, 200, 64)
+            # Count valid frames per sequence
+            valid_counts = temporal_mask.sum(dim=1, keepdim=True) + 1e-8  # (B, 1)
 
-            # Sum valid (non-zero) elements along the frame dimension
-            sum_masked_x = masked_x.sum(dim=1)
-            # print(f"sum_masked_x shape (after sum(dim=1)): {sum_masked_x.shape}") # **THIS MUST BE (16, 64)**
-
-            # Calculate the count of valid elements for each sequence
-            valid_counts = temporal_mask.sum(dim=1, keepdim=True) + 1e-8 
-            # print(f"valid_counts shape: {valid_counts.shape}") # Expected: (16, 1)
-            # print(f"valid_counts (first 5): {valid_counts[:5].flatten()}") # Check actual lengths
-
-            # Perform the weighted average
-            x_pooled = sum_masked_x / valid_counts
-            # print(f"Shape after final division (x_pooled): {x_pooled.shape}") # **THIS MUST BE (16, 64)**
-            x = x_pooled # Assign pooled result back to x
-
+            # Compute masked mean
+            x = sum_x / valid_counts  # (B, d_model)
         else:
-            # print("Temporal mask is NOT provided. Falling back to simple mean.")
             x = x.mean(dim=1) 
-            # print(f"After simple global pooling: {x.shape}")
 
         logits = self.classifier(x) 
-        # print(f"Final logits shape: {logits.shape}") # Expected: (16, 3)
-        # print("--- End HierarchicalTransformer Forward Pass (Detailed Debug) ---\n")
         return logits
