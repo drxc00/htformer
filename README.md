@@ -1,34 +1,51 @@
-# Please ayoko na mag thesis
-This repository contains the files and code used for creating the hierarchical transformer model for exercise recognition.
+# Hierarchical Transformer for Exercise Recognition
 
-## Data Organization
+This repository contains the implementation of a hierarchical transformer model for recognizing weightlifting exercises (deadlifts, squats, shoulder press) from pose keypoint data.
 
-Google drive link: [Data](https://drive.google.com/drive/folders/1clWxd97NM0EExJJRppgwfDhhTDBVFVX8?usp=sharing)
+## Project Structure
 
-- `data/raw/`: Contains the original unprocessed images
-- `data/keypoints/`: Stores extracted keypoint data. The `deadlifts_squat.npz` file contains the keypoint with label data for the deadlifts and squat exercises.
-- `data/augmented/`: Contains augmented images generated from the original dataset
-- `data/raw_unseen/`: Contains raw videos that were not used in the dataset creation process
+### Core Modules
+- `core/`
+  - `augment.py`: Data augmentation (flips, rotations) for exercise videos
+  - `keypoint_extractor.py`: Extracts body keypoints using MediaPipe
+  - `utils.py`: Utility functions for data processing and model operations
+  - `models/`
+    - `base_transformer_model.py`: Base transformer model implementation
+    - `hierarchical_transformer.py`: Hierarchical transformer implementation
 
-## File Structure
-- `augment.py`: Script for data augmentation that creates variations of exercise videos (flips, rotations)
-- `keypoint_extractor.py`: Extracts body keypoints from augmented videos using MediaPipe
-- `create_dataset.ipynb`: Jupyter notebook that processes extracted keypoints into a complete dataset
-- `transformer_prototype.ipynb`: Main implementation of the hierarchical transformer model for exercise recognition
-- `test_spatial.ipynb`: Testing notebook for the spatial transformer component
-- `test.py`: Simple test script for the augmentation process
-- `testing_again.py`: Script for testing MediaPipe pose detection visualization
-- `models/`: Directory containing model files
-  - `mediapipe/`: Contains MediaPipe pose detection models
-- `data/`: Directory containing all data files
+### Notebooks
+- `notebooks/`
+  - `training/`
+    - `hierarchical_transformer_training.ipynb`: Main training notebook
+    - `hierarchical_transformer_prototype.ipynb`: Prototype implementation
+  - `others/`
+    - `test_trained_model.ipynb`: Model evaluation notebook
+    - `visualization.ipynb`: Data visualization tools
+  - `create_dataset.ipynb`: Dataset creation pipeline
+  - `extract_keypoints.ipynb`: Keypoint extraction process
+
+### Data Organization
+- `data/`
   - `raw/`: Original exercise videos
-  - `augmented/`: Augmented videos generated from raw data
-  - `keypoints/`: Extracted keypoint data from augmented videos
+  - `raw_uncut/`: Unprocessed full-length videos
+  - `keypoints/`: Extracted pose keypoints
+  - `augmented/`: Augmented video frames
+  - `unseen/`: Test data not used in training
 
-## How to use
-1. If you have time, you can start with the raw data lol. Use the `augment.py` file to augment the data.
-2. After augmenting, you will notice a new folder called `augmented` in the `data` folder.
-3. Use the `keypoint_extractor.py` file to extract keypoint data from the augmented images.
-4. After extracting, you will notice a new folder called `keypoints` in the `data` folder.
-5. To create the complete dataset, run the `create_dataset.ipynb` file.
-6. Then go crazy with model.
+### Models
+- `models/hierarchical_transformer/`: Contains trained model weights
+  - Multiple versions with training dates
+  - Latest: `models/hierarchical_transformer/hierarchical_transformer_f200_d64_h4_s1_t1_do0.1_20250623_1841.pth`
+
+## Requirements
+- Python 3.8+
+- PyTorch
+- MediaPipe
+- NumPy
+- Jupyter Notebook
+
+## Usage
+
+1. Data Preparation: First prepare the data following the structure described in the `Data Organization` section. Keypoint extraction can be done using the `extract_keypoints.ipynb` notebook. This will perform augmentation and pose detection and extract keypoints for all exercise videos in the `data/raw` directory. The output will be saved in `data/keypoints/{exercise_name}/`.
+
+2. Training: Run the `hierarchical_transformer_training.ipynb` notebook. This will train the model on the prepared data and save the trained weights in `models/hierarchical_transformer/`.
