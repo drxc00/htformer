@@ -5,9 +5,9 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from hierarchical_transformer_prototype import HierarchicalTransformer
-from hierarchical_transformer_model_v2 import HierarchicalTransformer as HierarchicalTransformerV2
-from keypoint_extractor import KeypointExtractorV2
+from core.models.hierarchical_transformer_prototype import HierarchicalTransformer
+from core.models.hierarchical_transformer import HierarchicalTransformer as HierarchicalTransformerV2
+from core.keypoint_extractor import KeypointExtractorV2
 from mediapipe.framework.formats import landmark_pb2
 import mediapipe as mp
 from mediapipe import solutions
