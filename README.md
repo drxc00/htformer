@@ -42,7 +42,7 @@ This repository contains the implementation of a hierarchical transformer model 
 - PyTorch
 - MediaPipe
 - NumPy
-- Jupyter Notebook
+- Jupyter Notebook (optional vs code better lol)
 
 ## Usage
 
