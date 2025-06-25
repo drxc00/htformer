@@ -44,7 +44,7 @@ class SimpleTransformerEncoder(nn.Module):
         num_layers: int,
         num_classes: int,
         dim_feedforward: int = 2048,
-        dropout: float = 0.1
+        dropout: float = 0.7
     ):
         super().__init__()
         self.num_joints = num_joints

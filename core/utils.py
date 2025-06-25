@@ -2,6 +2,19 @@ import os
 import numpy as np
 from datetime import datetime
 
+
+def load_model_parameters(filename: str):
+    # Take the filename and parse it to get the parameters
+    # remove the "hier_transformer_" prefix
+    params = filename.replace("hierarchical_transformer_", "")
+    params = params.replace(".pth", "")
+    
+    params = params.split("_")
+    
+    # Convert to dictionary
+    params = {k: int(v) for k, v in zip(params[::2], params[1::2])}
+    return params
+
 def generate_model_filename(base_name: str, params: dict, keys_to_include=None, extension='pth'):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
     
