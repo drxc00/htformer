@@ -1,6 +1,18 @@
 import os
 import numpy as np
 from datetime import datetime
+import torch
+
+class TransformerLRScheduler(torch.optim.lr_scheduler._LRScheduler):
+    def __init__(self, optimizer, d_model, warmup_steps=4000, last_epoch=-1):
+        self.d_model = d_model
+        self.warmup_steps = warmup_steps
+        super(TransformerLRScheduler, self).__init__(optimizer, last_epoch)
+
+    def get_lr(self):
+        step = max(1, self._step_count)
+        scale = (self.d_model ** -0.5) * min(step ** -0.5, step * self.warmup_steps ** -1.5)
+        return [base_lr * scale for base_lr in self.base_lrs]
 
 
 def load_model_parameters(filename: str):
