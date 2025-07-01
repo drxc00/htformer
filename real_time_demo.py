@@ -328,7 +328,7 @@ def main():
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_full.task"
     )
-    real_time_recognizer.run(video_path="data/unseen/sample_SDS_run.mp4")
+    real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
     # real_time_recognizer.run()
     # real_time_recognizer.run(video_path="data/raw/deadlifts/700_F_676330024_bp3Sa9hAVlxHyHDzXTMXrkG58zneF7aQ_ST_V1-0113.mp4")
 if __name__ == "__main__":

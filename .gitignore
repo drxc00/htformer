@@ -22,6 +22,7 @@ data/raw/
 data/augmented/
 data/keypoints/
 data/unseen/
+data/testing/
 
 *.zip
 
