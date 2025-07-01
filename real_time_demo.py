@@ -18,18 +18,18 @@ class RealTimeExerciseRecognition:
         self.model_path = model_path
         self.keypoint_extractor = KeypointExtractorV2(model_path=landmarker_model)
         
-        self.num_frames=200
+        self.num_frames=201
         
         # Initialize the HierarchicalTransformer model
         self.model = HierarchicalTransformerV2(
             num_joints=33,
-            num_frames=200, # This must match the max_frames used in training
+            num_frames=201,
             d_model=64,
-            nhead=4,
+            nhead=2,
             num_spatial_layers=1,
             num_temporal_layers=1,
             num_classes=3,
-            dim_feedforward=512,
+            dim_feedforward=2048,
             dropout=0.1
         )
         
@@ -86,18 +86,7 @@ class RealTimeExerciseRecognition:
                 solutions.drawing_styles.get_default_pose_landmarks_style()
             )
         return annotated_image
-    
-    # The 'padding' method is no longer needed in its original form for live inference
-    # because the 'window_size' is set to match 'model_input_seq_len', and
-    # the masking logic handles zeros internally.
-    # def padding(self, keypoints, max_frames=200):
-    #     pad_len = max_frames - len(keypoints)
-    #     if pad_len > 0:
-    #         pad = np.zeros((pad_len, keypoints.shape[1], keypoints.shape[2]))
-    #         padded_sample = np.concatenate((keypoints, pad), axis=0)
-    #     else:
-    #         padded_sample = keypoints
-    #     return np.array(padded_sample)
+
     
     def _is_prediction_stable(self, recent_predictions, confidence_threshold):
         """Check if recent predictions are stable and confident"""
@@ -195,10 +184,10 @@ class RealTimeExerciseRecognition:
         frame_window = [] # Stores keypoint data (33, 4) or (33, 4) zeros for each frame in the window
         
         # window_size MUST match model's expected sequence length
-        window_size = self.model_input_seq_len 
+        window_size = 60
         
         prediction_text = "Buffering frames..." # Initial status
-        confidence = 0.0
+        confidence = 0.5
         pose_confidence_threshold = 0.5 # Minimum confidence for pose landmarks (MediaPipe's internal visibility score)
         
         recent_predictions = []
@@ -332,13 +321,15 @@ class RealTimeExerciseRecognition:
         cv2.destroyAllWindows()
 
 def main():
-    model_path = "models/hierarchical transformer/hierarchical_transformer_v2_weights_2025-06-21_complete.pth"
+    
+    
+    model_path = "models/hierarchical_transformer/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250630_0325.pth"
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
-        landmarker_model="models/mediapipe/pose_landmarker_lite.task"
+        landmarker_model="models/mediapipe/pose_landmarker_full.task"
     )
-    # real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
-    real_time_recognizer.run()
+    real_time_recognizer.run(video_path="data/unseen/sample_SDS_run.mp4")
+    # real_time_recognizer.run()
     # real_time_recognizer.run(video_path="data/raw/deadlifts/700_F_676330024_bp3Sa9hAVlxHyHDzXTMXrkG58zneF7aQ_ST_V1-0113.mp4")
 if __name__ == "__main__":
     main()

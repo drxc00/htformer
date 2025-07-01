@@ -10,7 +10,7 @@ class TransformerLRScheduler(torch.optim.lr_scheduler._LRScheduler):
         super(TransformerLRScheduler, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
-        step = max(1, self.last_epoch + 1)  # Use last_epoch (starts at -1)
+        step = max(1, self._step_count)
         scale = (self.d_model ** -0.5) * min(step ** -0.5, step * self.warmup_steps ** -1.5)
         return [base_lr * scale for base_lr in self.base_lrs]
 
