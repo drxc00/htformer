@@ -187,7 +187,7 @@ class RealTimeExerciseRecognition:
         window_size = 60
         
         prediction_text = "Buffering frames..." # Initial status
-        confidence = 0.5
+        confidence = 0.0
         pose_confidence_threshold = 0.5 # Minimum confidence for pose landmarks (MediaPipe's internal visibility score)
         
         recent_predictions = []
@@ -268,6 +268,10 @@ class RealTimeExerciseRecognition:
                             max_prob, predicted_class_idx = torch.max(probabilities, dim=1)
                             
                             prediction_confidence = max_prob.item()
+                            
+                            # Set the confidence to the prediction confidence
+                            confidence = prediction_confidence
+                            
                             predicted_class = predicted_class_idx.item()
                             
                             # Track recent predictions for smoothing
@@ -328,8 +332,8 @@ def main():
         model_path=model_path,
         landmarker_model="models/mediapipe/pose_landmarker_full.task"
     )
-    real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
+    # real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
     # real_time_recognizer.run()
-    # real_time_recognizer.run(video_path="data/raw/deadlifts/700_F_676330024_bp3Sa9hAVlxHyHDzXTMXrkG58zneF7aQ_ST_V1-0113.mp4")
+    real_time_recognizer.run(video_path="data/unseen/sample_SDS_run.mp4")
 if __name__ == "__main__":
     main()
