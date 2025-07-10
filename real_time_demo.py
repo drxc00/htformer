@@ -207,11 +207,11 @@ class RealTimeExerciseRecognition:
         # Current approach: Accumulation with reset
         max_buffer_size = 201  # Maximum accumulation size
         prediction_interval = 30  # Run inference every N frames when buffer has enough data
-        min_frames_for_prediction = 30  # Minimum frames needed before starting predictions
+        min_frames_for_prediction = 60  # Minimum frames needed before starting predictions
 
         prediction_text = "Uncertain"  # Initial status
         confidence = 0.0
-        model_confidence_threshold = 0.7  # Minimum confidence for model predictions
+        model_confidence_threshold = 0.6  # Minimum confidence for model predictions
         # Minimum confidence for pose landmarks (MediaPipe's internal visibility score)
         pose_confidence_threshold = 0.5
 
@@ -448,12 +448,12 @@ def launch_gui():
         root.destroy()
         real_time_recognizer.run()  # webcam mode
 
-    model_path = "models/hierarchical_transformer/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250630_0325.pth"
+    model_path = "models/final/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250701_2251.pth"
 
     global real_time_recognizer
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
-        landmarker_model="models/mediapipe/pose_landmarker_heavy.task"
+        landmarker_model="models/mediapipe/pose_landmarker_full.task"
     )
 
     # Initialize GUI window
