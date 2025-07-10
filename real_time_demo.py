@@ -473,20 +473,6 @@ def launch_gui():
 
     root.mainloop()
 
-
-def main():
-
-    model_path = "models/hierarchical_transformer/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250630_0325.pth"
-    real_time_recognizer = RealTimeExerciseRecognition(
-        model_path=model_path,
-        landmarker_model="models/mediapipe/pose_landmarker_full.task"
-    )
-    # real_time_recognizer.run(video_path="data/unseen/jpt.mp4")
-    # real_time_recognizer.run()
-    # real_time_recognizer.run(video_path="data/unseen/routine.mp4")
-    real_time_recognizer.run(video_path="data/unseen/sample_SDS_run.mp4")
-
-
 if __name__ == "__main__":
     # main()
     launch_gui()
