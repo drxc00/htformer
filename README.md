@@ -1,4 +1,4 @@
-# Hierarchical Transformer for Exercise Recognition
+# Hierarchical Transformer (HTFormer) for Exercise Recognition
 
 This repository contains the implementation of a hierarchical transformer model for recognizing weightlifting exercises (deadlifts, squats, shoulder press) from pose keypoint data extracted using MediaPipe.
 
