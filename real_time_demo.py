@@ -1,7 +1,9 @@
 # So we will try to use the model for real-time exercise recognition.
 # Since the model is trained on videos with 1 repetition, we will use a sliding window approach to capture the temporal context.
+import os
+import sys
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import cv2
 import numpy as np
 import torch
@@ -435,6 +437,15 @@ class RealTimeExerciseRecognition:
         cv2.destroyAllWindows()
 
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS  # PyInstaller sets this at runtime
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
 def launch_gui():
     def select_video():
         file_path = filedialog.askopenfilename(
@@ -448,12 +459,13 @@ def launch_gui():
         root.destroy()
         real_time_recognizer.run()  # webcam mode
 
-    model_path = "models/final/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250701_2251.pth"
+    model_path = resource_path("models/final/hierarchical_transformer_f201_d64_h2_s1_t1_do0.1_20250701_2251.pth")
+    landmarker_model = resource_path("models/mediapipe/pose_landmarker_full.task")
 
     global real_time_recognizer
     real_time_recognizer = RealTimeExerciseRecognition(
         model_path=model_path,
-        landmarker_model="models/mediapipe/pose_landmarker_full.task"
+        landmarker_model=landmarker_model
     )
 
     # Initialize GUI window
